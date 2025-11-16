@@ -2,7 +2,8 @@ name: IPO ATH Alert
 
 on:
   schedule:
-    - cron: "*/5 3-10 * * 1-5"   # Every 5 minutes during market hours (UTC)
+    - cron: "0,15,30,45 4-9 * * 1-5"
+    - cron: "45 9 * * 1-5"
   workflow_dispatch:
 
 jobs:
@@ -16,14 +17,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
       - name: Install dependencies
-        run: |
-          pip install pandas yfinance requests
+        run: pip install pandas yfinance requests
 
-      - name: Run IPO scanner
+      - name: Run IPO Scanner
         run: python ipo_scanner.py
