@@ -1,27 +1,29 @@
+# .github/workflows/ipo_alert.yml
 name: IPO ATH Alert
 
 on:
   schedule:
-    # Every 5 minutes, Mon–Fri, during Indian market hours (9:15–15:30 IST)
-    - cron: "*/5 3-10 * * 1-5"  
+    - cron: "*/5 3-10 * * 1-5"  # every 5 minutes during market hours (UTC 03:00-10:59 Mon-Fri)
   workflow_dispatch:
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
+    env:
+      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      CHAT_ID: ${{ secrets.CHAT_ID }}
 
     steps:
-    - name: Checkout Repo
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.10"
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
 
-    - name: Install Dependencies
-      run: |
-        pip install pandas yfinance requests
+      - name: Install dependencies
+        run: pip install pandas yfinance requests
 
-    - name: Run IPO Scanner
-      run: python the\ important\ codes/ipo_scanner.py
+      - name: Run IPO Scanner
+        run: python the\ important\ codes/ipo_scanner.py
