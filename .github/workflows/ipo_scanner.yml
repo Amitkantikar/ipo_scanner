@@ -1,12 +1,13 @@
-name: IPO Scanner Daily
+name: IPO ATH Alert
 
 on:
   schedule:
-    - cron: "0 4 * * *"   # 9:30 AM IST
+    # Every 5 minutes, Mon–Fri, during Indian market hours (9:15–15:30 IST)
+    - cron: "*/5 3-10 * * 1-5"  
   workflow_dispatch:
 
 jobs:
-  run-ipo-scan:
+  run-script:
     runs-on: ubuntu-latest
 
     steps:
@@ -14,19 +15,13 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Setup Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v4
       with:
         python-version: "3.10"
 
     - name: Install Dependencies
       run: |
-        pip install requests pandas beautifulsoup4 lxml
+        pip install pandas yfinance requests
 
     - name: Run IPO Scanner
-      run: python ipo_scan.py
-
-    - name: Upload IPO CSV
-      uses: actions/upload-artifact@v4
-      with:
-        name: ipo_report
-        path: ipo_output.csv
+      run: python the\ important\ codes/ipo_scanner.py
