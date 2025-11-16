@@ -2,31 +2,32 @@ name: IPO Scanner Daily
 
 on:
   schedule:
-    # Runs at 9:30 AM IST (which is 04:00 UTC)
+    # 9:30 AM IST = 04:00 UTC
     - cron: "0 4 * * *"
-  workflow_dispatch:  # Manual run
+  workflow_dispatch:
 
 jobs:
-  run-ipo-scanner:
+  run-ipo-scan:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v3
+    - name: Checkout Repo
+      uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
       with:
         python-version: "3.10"
 
-    - name: Install requirements
-      run: pip install pandas requests
+    - name: Install Dependencies
+      run: |
+        pip install requests pandas
 
     - name: Run IPO Scanner
       run: python ipo_scan.py
 
-    - name: Upload IPO CSV as Artifact
-      uses: actions/upload-artifact@v3
+    - name: Upload IPO CSV
+      uses: actions/upload-artifact@v4
       with:
         name: ipo_report
         path: ipo_output.csv
