@@ -2,8 +2,7 @@ name: IPO Scanner Daily
 
 on:
   schedule:
-    # 9:30 AM IST = 04:00 UTC
-    - cron: "0 4 * * *"
+    - cron: "0 4 * * *"   # 9:30 AM IST
   workflow_dispatch:
 
 jobs:
@@ -21,7 +20,7 @@ jobs:
 
     - name: Install Dependencies
       run: |
-        pip install requests pandas
+        pip install requests pandas beautifulsoup4 lxml
 
     - name: Run IPO Scanner
       run: python ipo_scan.py
