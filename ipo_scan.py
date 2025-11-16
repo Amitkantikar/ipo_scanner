@@ -1,34 +1,49 @@
 import requests
 import pandas as pd
+from bs4 import BeautifulSoup
+import re
 
 def fetch_recent_non_sme():
-    url = "https://groww.in/v1/api/ipo/v2/all"
+    sitemap_url = "https://groww.in/sitemap/ipo_sitemap.xml"
+    headers = {"User-Agent": "Mozilla/5.0"}
 
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    r = requests.get(sitemap_url, headers=headers)
+    soup = BeautifulSoup(r.text, "xml")
 
-    r = requests.get(url, headers=headers, timeout=10)
+    urls = [loc.text for loc in soup.find_all("loc")]
 
-    data = r.json()
+    results = []
 
-    listed = data.get("listedIpos", [])
+    for url in urls:
+        page = requests.get(url, headers=headers)
+        if page.status_code != 200:
+            continue
+        
+        html = BeautifulSoup(page.text, "html.parser")
 
-    df = pd.DataFrame(listed)
+        # Extract embedded JSON-LD (IPO data)
+        script = html.find("script", {"type": "application/ld+json"})
+        if not script:
+            continue
 
-    # Filter mainboard (non-SME)
-    df = df[df["isSmeIpo"] == False]
+        try:
+            data = eval(script.text)  # safe because groww uses JS objects
+        except:
+            continue
 
-    df = df[[
-        "companyName",
-        "symbol",
-        "listingDate",
-        "issuePrice",
-        "isSmeIpo"
-    ]]
+        # Extract fields
+        company = data.get("name")
+        listing_date = data.get("datePublished")
+        symbol = data.get("tickerSymbol", "")
+        is_sme = "SME" in company.upper()
 
-    df["listingDate"] = pd.to_datetime(df["listingDate"], errors="coerce")
-    df = df.sort_values("listingDate", ascending=False)
+        # Only non-SME
+        if not is_sme:
+            results.append([company, symbol, listing_date, is_sme])
+
+    df = pd.DataFrame(results, columns=["company_name", "symbol", "listing_date", "is_sme"])
+    df["listing_date"] = pd.to_datetime(df["listing_date"], errors="coerce")
+    df = df.sort_values("listing_date", ascending=False)
 
     df.to_csv("ipo_output.csv", index=False)
     print(df)
