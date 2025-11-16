@@ -1,9 +1,8 @@
-# .github/workflows/ipo_alert.yml
 name: IPO ATH Alert
 
 on:
   schedule:
-    - cron: "*/5 3-10 * * 1-5"  # every 5 minutes during market hours (UTC 03:00-10:59 Mon-Fri)
+    - cron: "*/5 3-10 * * 1-5"
   workflow_dispatch:
 
 jobs:
@@ -26,4 +25,4 @@ jobs:
         run: pip install pandas yfinance requests
 
       - name: Run IPO Scanner
-        run: python the\ important\ codes/ipo_scanner.py
+        run: python the_important_codes/ipo_scanner.py
