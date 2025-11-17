@@ -9,7 +9,7 @@ from io import BytesIO
 # CONFIG
 # --------------------------
 MIN_DAYS = 60
-THRESHOLD = 0.02  # 2% near ATH
+THRESHOLD = 0.04  # 2% near ATH
 
 # Read Telegram credentials from environment (GitHub Secrets)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
