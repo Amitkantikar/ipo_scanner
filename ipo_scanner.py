@@ -8,7 +8,7 @@ from io import BytesIO
 # --------------------------
 # CONFIG
 # --------------------------
-MIN_DAYS = 60
+MIN_DAYS = 120
 THRESHOLD = 0.04  # 2% near ATH
 
 # Read Telegram credentials from environment (GitHub Secrets)
