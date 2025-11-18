@@ -2,7 +2,7 @@ name: IPO Scanner
 
 on:
   schedule:
-    - cron: "*/15 3-10 * * 1-5"   # 9:15–15:30 IST (convert: IST-5:30=UTC)
+    - cron: "*/15 3-10 * * 1-5"   # runs every 15 min between 9:15–15:30 IST (UTC converted)
   workflow_dispatch:
 
 jobs:
@@ -14,13 +14,13 @@ jobs:
         uses: actions/checkout@v4
 
       # ---------------------------
-      # GitHub Cache Restore
+      # Restore Cache
       # ---------------------------
-      - name: Restore IPO history cache
+      - name: Restore IPO Cache
         uses: actions/cache@v4
         with:
-          path: ipo_history.pkl
-          key: ipo-history-cache
+          path: ipo_cache.pkl         # UPDATED FILE NAME
+          key: ipo-cache-file         # cache key name
 
       - name: Install dependencies
         run: |
@@ -33,11 +33,11 @@ jobs:
         run: python ipo_scanner.py
 
       # ---------------------------
-      # GitHub Cache Save
+      # Save Cache
       # ---------------------------
-      - name: Save IPO history cache
+      - name: Save IPO Cache
         uses: actions/cache/save@v4
         if: always()
         with:
-          path: ipo_history.pkl
-          key: ipo-history-cache
+          path: ipo_cache.pkl         # UPDATED FILE NAME
+          key: ipo-cache-file
