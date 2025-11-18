@@ -1,69 +1,102 @@
-# ipo_scanner.py
+# ipo_scanner_fast.py
+
 import os
-import requests
+import logging
 import pandas as pd
 import yfinance as yf
+import requests
 from io import BytesIO
+from datetime import datetime, timedelta
 
-# --------------------------
+# ------------------------------------------------
+# LOGGING
+# ------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+log = logging.getLogger("IPO")
+
+# ------------------------------------------------
 # CONFIG
-# --------------------------
+# ------------------------------------------------
 MIN_DAYS = 120
-THRESHOLD = 0.04  # 2% near ATH
+THRESHOLD = 0.04
+BATCH_SIZE = 40
 
-# Read Telegram credentials from environment (GitHub Secrets)
+# Cache file (stored inside GitHub Actions workspace)
+CACHE_FILE = "ipo_history.pkl"
+
+# Telegram config
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
+
+# ------------------------------------------------
+# Telegram Sender
+# ------------------------------------------------
 def send_telegram(msg):
     if not BOT_TOKEN or not CHAT_ID:
-        print("Telegram credentials missing (BOT_TOKEN or CHAT_ID). Skipping send.")
+        log.warning("Missing Telegram credentials")
         return
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": msg,
-        "parse_mode": "Markdown"
-    }
     try:
-        r = requests.post(url, data=payload, timeout=10)
+        r = requests.post(
+            url,
+            data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"},
+            timeout=10
+        )
         if r.status_code != 200:
-            print("Telegram API returned", r.status_code, r.text[:200])
+            log.error(f"Telegram API error {r.status_code}")
     except Exception as e:
-        print("Failed to send telegram:", e)
+        log.error(f"Telegram send failed: {e}")
 
-# --------------------------
-# Load NSE Symbols
-# --------------------------
+
+# ------------------------------------------------
+# Fetch NSE Symbols
+# ------------------------------------------------
 def get_all_mainboard_symbols():
     url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
     r = requests.get(url, timeout=20)
     df = pd.read_csv(BytesIO(r.content))
     df.columns = df.columns.str.strip()
-    return df[df["SERIES"] == "EQ"]["SYMBOL"].tolist()
+    symbols = df[df["SERIES"] == "EQ"]["SYMBOL"].tolist()
+    log.info(f"Loaded {len(symbols)} NSE symbols")
+    return symbols
 
-# --------------------------
-# Batch OHLC for IPO detection
-# --------------------------
+
+# ------------------------------------------------
+# Detect IPOs (batch 90d)
+# ------------------------------------------------
 def fetch_batch(symbols):
     tickers = [s + ".NS" for s in symbols]
-    return yf.download(tickers, period="90d", interval="1d", group_by="ticker", threads=False)
+    return yf.download(
+        tickers,
+        period="90d",
+        interval="1d",
+        group_by="ticker",
+        threads=False,
+        progress=False
+    )
+
 
 def detect_ipos():
     symbols = get_all_mainboard_symbols()
-    results = []
-    batch_size = 40
+    ipos = []
 
-    for i in range(0, len(symbols), batch_size):
-        batch = symbols[i:i + batch_size]
+    for i in range(0, len(symbols), BATCH_SIZE):
+        batch = symbols[i:i + BATCH_SIZE]
         data = fetch_batch(batch)
-        # If single ticker, yfinance returns a single-level df — guard for that
+
+        if data.empty:
+            continue
+
+        # Get available tickers
         if isinstance(data.columns, pd.MultiIndex):
             available = list(data.columns.get_level_values(0).unique())
         else:
-            # single ticker batch fallback
-            available = [batch[0] + ".NS"] if batch else []
+            available = [batch[0] + ".NS"]
 
         for sym in batch:
             key = sym + ".NS"
@@ -72,72 +105,128 @@ def detect_ipos():
 
             try:
                 hist = data[key].dropna() if isinstance(data.columns, pd.MultiIndex) else data.dropna()
-            except Exception:
+            except:
                 continue
 
             if len(hist) < MIN_DAYS:
-                results.append(sym)
+                ipos.append(sym)
 
-    return results
+    log.info(f"Detected IPO stocks: {len(ipos)}")
+    return ipos
 
-# --------------------------
-# Get full ATH + ATH candle index
-# --------------------------
-def get_ath_and_index(symbol):
-    hist = yf.Ticker(symbol + ".NS").history(period="max")
-    if hist.empty:
-        return None, None, 0
-    ath = hist["High"].max()
-    ath_index = hist["High"].idxmax()  # timestamp
-    ath_pos = hist.index.get_loc(ath_index)  # integer position
-    return ath, ath_pos, len(hist)
 
-# --------------------------
-# Get current price
-# --------------------------
-def get_current_price(symbol):
-    data = yf.Ticker(symbol + ".NS").history(period="1d")
-    if data.empty:
-        return None
-    return data["Close"].iloc[-1]
+# ------------------------------------------------
+# CACHE MANAGEMENT
+# ------------------------------------------------
+def load_cache():
+    if not os.path.exists(CACHE_FILE):
+        log.info("Cache not found. Full history will be downloaded.")
+        return {}
 
-# --------------------------
+    try:
+        df_dict = pd.read_pickle(CACHE_FILE)
+        log.info(f"Loaded cache with {len(df_dict)} tickers")
+        return df_dict
+    except Exception as e:
+        log.error(f"Cache load failed: {e}")
+        return {}
+
+
+def save_cache(cache):
+    pd.to_pickle(cache, CACHE_FILE)
+    log.info("History cache updated.")
+
+
+# ------------------------------------------------
+# Fast history updater
+# ------------------------------------------------
+def update_history(cache, symbols):
+    """Download ONLY missing/max history once, then only append new data"""
+
+    missing = [s for s in symbols if s not in cache]
+
+    if missing:
+        log.info(f"Downloading MAX history for {len(missing)} new tickers")
+        for i in range(0, len(missing), BATCH_SIZE):
+            batch = missing[i:i + BATCH_SIZE]
+            data = yf.download(
+                [s + ".NS" for s in batch],
+                period="max",
+                interval="1d",
+                group_by="ticker",
+                threads=False,
+                progress=False
+            )
+
+            for sym in batch:
+                key = sym + ".NS"
+                try:
+                    cache[sym] = data[key].dropna()
+                except:
+                    cache[sym] = pd.DataFrame()
+
+        save_cache(cache)
+
+    # Update all symbols with ONLY the latest candle (super fast)
+    log.info("Updating last daily candles for all cached tickers")
+
+    for sym in symbols:
+        try:
+            latest = yf.Ticker(sym + ".NS").history(period="1d")
+            if not latest.empty:
+                cache[sym] = pd.concat([cache[sym], latest]).drop_duplicates()
+        except:
+            pass
+
+    save_cache(cache)
+    return cache
+
+
+# ------------------------------------------------
 # MAIN WORKFLOW
-# --------------------------
+# ------------------------------------------------
 if __name__ == "__main__":
-    # quick validation
-    if not BOT_TOKEN or not CHAT_ID:
-        print("Warning: BOT_TOKEN or CHAT_ID not set in environment. Add them as GitHub Secrets.")
-    print("🔎 Detecting IPO stocks…")
+    log.info("🔍 Starting IPO Near ATH scan")
+
     ipos = detect_ipos()
-    print("Found:", ipos)
+    if not ipos:
+        log.info("No IPO stocks found")
+        exit()
 
+    # Load cache (no max downloads if exists)
+    history_cache = load_cache()
+
+    # Update only missing & last candles
+    history_cache = update_history(history_cache, ipos)
+
+    # Process detection
     for sym in ipos:
-        ath, ath_pos, total_candles = get_ath_and_index(sym)
-        if not ath:
+        hist = history_cache.get(sym)
+        if hist is None or hist.empty:
             continue
 
-        # ATH must be at least 3 candles old
-        if ath_pos > total_candles - 4:
-            continue  # skip if ATH is too recent
+        total = len(hist)
+        ath = hist["High"].max()
+        ath_index = hist["High"].idxmax()
+        ath_pos = hist.index.get_loc(ath_index)
 
-        current = get_current_price(sym)
-        if not current:
+        if ath_pos > total - 4:
             continue
 
-        # near ATH within THRESHOLD
+        current = hist["Close"].iloc[-1]
+
         if current >= ath * (1 - THRESHOLD):
             diff = round(((ath - current) / ath) * 100, 2)
 
             msg = (
-                f"🚨 *IPO Near All-Time High (3-candle rule passed)!*\n"
+                f"🚨 *IPO Near All-Time High!*\n"
                 f"*Symbol:* {sym}\n"
                 f"*ATH:* {ath:.2f}\n"
                 f"*CMP:* {current:.2f}\n"
-                f"*Distance from ATH:* {diff}%"
+                f"*Diff:* {diff}%"
             )
 
-            print(f"Alert → {sym} (ATH {ath:.2f}, CMP {current:.2f}, diff {diff}%)")
+            log.info(f"ALERT → {sym} (diff {diff}%)")
             send_telegram(msg)
 
-    print("\n✔ Scan complete!")
+    log.info("✔ Scan complete")
