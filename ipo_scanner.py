@@ -1,20 +1,22 @@
 # ipo_scanner.py
+
 import os
-import logging
 import pickle
+import logging
+from io import BytesIO
+from time import sleep
+
 import requests
 import pandas as pd
 import yfinance as yf
-from io import BytesIO
-from time import sleep
 
 # --------------------------
 # CONFIG
 # --------------------------
-MIN_DAYS = 120
-THRESHOLD = 0.04       # 4% from ATH
+MIN_DAYS = 90        # IPO = less than 90-day candles
+THRESHOLD = 0.04
 BATCH_SIZE = 40
-CACHE_FILE = "ipo_cache.pkl"   # store only IPO symbols + their full history
+CACHE_FILE = "ipo_cache.pkl"
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
@@ -24,24 +26,24 @@ log = logging.getLogger("IPO")
 
 
 # --------------------------
-# Telegram
+# TELEGRAM
 # --------------------------
 def send_telegram(msg):
     if not BOT_TOKEN or not CHAT_ID:
-        log.warning("BOT_TOKEN or CHAT_ID missing")
+        log.warning("Telegram credentials missing")
         return
-
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
-
     try:
-        requests.post(url, data=payload, timeout=10)
-    except Exception:
-        log.exception("Failed to send Telegram")
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"},
+            timeout=10
+        )
+    except:
+        log.exception("Telegram send failed")
 
 
 # --------------------------
-# Load NSE symbols
+# LOAD SYMBOLS
 # --------------------------
 def get_all_mainboard_symbols():
     url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
@@ -52,19 +54,40 @@ def get_all_mainboard_symbols():
 
 
 # --------------------------
-# Fast IPO Detection (Your 90-day logic)
+# LOAD / SAVE CACHE
 # --------------------------
-def detect_recent_ipos():
+def load_cache():
+    if not os.path.exists(CACHE_FILE):
+        return {"ipo_symbols": [], "histories": {}}
+    try:
+        return pickle.load(open(CACHE_FILE, "rb"))
+    except:
+        return {"ipo_symbols": [], "histories": {}}
+
+
+def save_cache(cache):
+    pickle.dump(cache, open(CACHE_FILE, "wb"))
+
+
+# --------------------------
+# IPO DETECTION USING 90 DAYS ONLY (FAST)
+# --------------------------
+def detect_ipos_90d_only():
     symbols = get_all_mainboard_symbols()
     ipo_list = []
 
     for i in range(0, len(symbols), BATCH_SIZE):
-        batch = symbols[i:i + BATCH_SIZE]
+        batch = symbols[i : i + BATCH_SIZE]
         tickers = [s + ".NS" for s in batch]
 
-        # 90-day fetch is fast
-        data = yf.download(tickers, period="90d", interval="1d",
-                           group_by="ticker", threads=False, progress=False)
+        data = yf.download(
+            tickers,
+            period="90d",
+            interval="1d",
+            group_by="ticker",
+            threads=False,
+            progress=False
+        )
 
         if data.empty:
             continue
@@ -82,46 +105,38 @@ def detect_recent_ipos():
             df = data[key] if isinstance(data.columns, pd.MultiIndex) else data
             hist = df.dropna()
 
-            # IPO logic (your original intention)
-            if len(hist) < MIN_DAYS:
-                ipo_list.append(sym)
+            # 👉 CORE LOGIC YOU ASKED FOR
+            # If stock has nearly full 90-day history, SKIP (not IPO)
+            if len(hist) >= MIN_DAYS:
+                continue
+
+            # If very little / missing 90-day history → NEW IPO
+            ipo_list.append(sym)
 
     return sorted(list(set(ipo_list)))
 
 
 # --------------------------
-# Cache Load/Save
+# FETCH MAX HISTORY ONLY FOR IPOs
 # --------------------------
-def load_cache():
-    if not os.path.exists(CACHE_FILE):
-        return {"ipo_symbols": [], "histories": {}}
-    try:
-        return pickle.load(open(CACHE_FILE, "rb"))
-    except:
-        return {"ipo_symbols": [], "histories": {}}
-
-
-def save_cache(cache):
-    pickle.dump(cache, open(CACHE_FILE, "wb"))
-
-
-# --------------------------
-# Fetch MAX history ONCE for IPO symbols only
-# --------------------------
-def fetch_max_for_ipos(ipos, cache):
+def fetch_max_history(ipos, cache):
     missing = [s for s in ipos if s not in cache["histories"]]
 
     if not missing:
         return cache
 
-    log.info(f"Downloading MAX history for {len(missing)} new IPOs...")
-
     for i in range(0, len(missing), BATCH_SIZE):
-        batch = missing[i:i + BATCH_SIZE]
+        batch = missing[i : i + BATCH_SIZE]
         tickers = [s + ".NS" for s in batch]
 
-        data = yf.download(tickers, period="max", interval="1d",
-                           group_by="ticker", threads=False, progress=False)
+        data = yf.download(
+            tickers,
+            period="max",
+            interval="1d",
+            group_by="ticker",
+            threads=False,
+            progress=False
+        )
 
         for sym in batch:
             key = sym + ".NS"
@@ -129,49 +144,49 @@ def fetch_max_for_ipos(ipos, cache):
                 hist = data[key].dropna()
             except:
                 hist = yf.Ticker(key).history(period="max")
+
             cache["histories"][sym] = hist
 
     return cache
 
 
 # --------------------------
-# Update latest 5-min or daily candle
+# UPDATE WITH LATEST 5-MIN / DAILY
 # --------------------------
-def update_latest_candle(cache):
+def update_latest_candles(cache):
     for sym in cache["ipo_symbols"]:
         ticker = sym + ".NS"
 
         try:
-            # 5-minute candles (fast intraday update)
-            df_5m = yf.download(ticker, period="1d", interval="5m",
-                                group_by="ticker", threads=False, progress=False)
+            df_5m = yf.download(
+                ticker, period="1d", interval="5m",
+                group_by="ticker", threads=False, progress=False
+            )
             new = df_5m.dropna()
         except:
             new = pd.DataFrame()
 
         if new.empty:
-            # fallback
             new = yf.Ticker(ticker).history(period="1d")
 
         if not new.empty:
             old = cache["histories"].get(sym, pd.DataFrame())
-            combined = pd.concat([old, new])
-            combined = combined[~combined.index.duplicated(keep="last")]
-            cache["histories"][sym] = combined
+            merged = pd.concat([old, new])
+            merged = merged[~merged.index.duplicated(keep="last")]
+            cache["histories"][sym] = merged
 
     return cache
 
 
 # --------------------------
-# ATH logic + alert
+# CHECK ATH + ALERT
 # --------------------------
-def check_ath_and_alert(cache):
+def check_ath(cache):
     for sym in cache["ipo_symbols"]:
         hist = cache["histories"].get(sym)
         if hist is None or hist.empty:
             continue
 
-        # ATH calculations
         ath = hist["High"].max()
         ath_idx = hist["High"].idxmax()
         ath_pos = hist.index.get_loc(ath_idx)
@@ -193,32 +208,32 @@ def check_ath_and_alert(cache):
                 f"*Diff:* {diff}%"
             )
             send_telegram(msg)
-            log.info(f"Alert sent for {sym}")
+            log.info(f"Alert sent → {sym}")
 
 
 # --------------------------
-# MAIN WORKFLOW
+# MAIN
 # --------------------------
 if __name__ == "__main__":
-    log.info("Starting IPO scanner...")
+    log.info("Running IPO scanner...")
 
     cache = load_cache()
 
-    # Step 1 — Detect IPOs fast (your logic)
-    ipos = detect_recent_ipos()
-    log.info(f"Detected IPOs: {ipos}")
+    # Step 1: detect IPOs using 90-day history ONLY (VERY FAST)
+    ipos = detect_ipos_90d_only()
+    log.info(f"Found IPOs: {ipos}")
 
     cache["ipo_symbols"] = ipos
 
-    # Step 2 — Fetch MAX history ONLY for these IPOs (first run)
-    cache = fetch_max_for_ipos(ipos, cache)
+    # Step 2: fetch MAX history ONLY for IPOs
+    cache = fetch_max_history(ipos, cache)
     save_cache(cache)
 
-    # Step 3 — Update with latest candle (fast)
-    cache = update_latest_candle(cache)
+    # Step 3: intraday update
+    cache = update_latest_candles(cache)
     save_cache(cache)
 
-    # Step 4 — Check ATH + alert
-    check_ath_and_alert(cache)
+    # Step 4: ATH alert
+    check_ath(cache)
 
-    log.info("Scan completed")
+    log.info("✔ Scan Complete")
