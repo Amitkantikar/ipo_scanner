@@ -10,6 +10,8 @@ import pickle
 import requests
 import pandas as pd
 import yfinance as yf
+import warnings
+
 
 # ------------------------------------------------------------
 # SUPPRESS FUTURE WARNINGS
