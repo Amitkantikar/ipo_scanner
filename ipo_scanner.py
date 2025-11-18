@@ -9,8 +9,6 @@ from io import BytesIO
 from datetime import datetime
 from time import sleep
 
-import config
-
 # ------------------------------------------------
 # LOGGING
 # ------------------------------------------------
