@@ -26,8 +26,8 @@ THRESHOLD = 0.04             # 4% near ATH
 BATCH_SIZE = 40              # Batch size for yfinance calls
 CACHE_FILE = "ipo_history.pkl"   # Cache stored inside GitHub Actions repo workspace
 
-BOT_TOKEN = config.BOT_TOKEN
-CHAT_ID = config.CHAT_ID
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+CHAT_ID = os.environ.get("CHAT_ID")
 
 # ------------------------------------------------
 # Telegram Sender
