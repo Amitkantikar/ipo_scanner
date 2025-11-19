@@ -42,7 +42,7 @@ def send_telegram(msg: str):
 # --------------------------
 def fetch_equity_list():
     url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
-    r = requests.get(url, timeout=20)
+    r = requests.get(url, timeout=40)
     df = pd.read_csv(BytesIO(r.content))
     df.columns = df.columns.str.strip()
     return df
