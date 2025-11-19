@@ -31,7 +31,7 @@ from urllib3.util.retry import Retry
 # Config / defaults
 # -----------------------
 DEFAULT_MIN_LISTING_DAYS = 120
-DEFAULT_THRESHOLD = 0.025  # fraction (0.025 = within 2.5% of ATH)
+DEFAULT_THRESHOLD = 0.05  # fraction (0.025 = within 2.5% of ATH)
 YF_SUFFIX = ".NS"  # Yahoo ticker suffix for NSE
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
