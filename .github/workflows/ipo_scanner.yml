@@ -2,9 +2,14 @@ name: IPO Scanner
 
 on:
   schedule:
-    # Runs every 5 minutes between 9:15–15:30 IST (03:45–10:00 UTC), Monday–Friday
-    - cron: "45-59/5 3 * * 1-5"   # 03:45–03:59 UTC (first 15 minutes block)
-    - cron: "*/5 4-10 * * 1-5"    # 04:00–10:00 UTC (rest of the session)
+    # 9:15–9:29 IST = 03:45–03:59 UTC (3 triggers)
+    - cron: "45 3 * * 1-5"
+    - cron: "50 3 * * 1-5"
+    - cron: "55 3 * * 1-5"
+
+    # 9:30–15:30 IST = 04:00–10:00 UTC (every 5 minutes)
+    - cron: "*/5 4-10 * * 1-5"
+
   workflow_dispatch:
 
 jobs:
@@ -15,9 +20,6 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # ---------------------------
-      # Restore Cache
-      # ---------------------------
       - name: Restore IPO Cache
         uses: actions/cache@v4
         with:
@@ -34,9 +36,6 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python ipo_scanner.py
 
-      # ---------------------------
-      # Save Cache
-      # ---------------------------
       - name: Save IPO Cache
         uses: actions/cache/save@v4
         if: always()
