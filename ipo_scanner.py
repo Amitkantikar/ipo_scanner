@@ -14,8 +14,6 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 # --------------------------
 MIN_LISTING_DAYS = 120      # number of days since listing
 THRESHOLD = 0.03            # 3% near ATH
-MIN_VOLUME = 100000         # 🔥 volume filter (minimum last candle volume)
-MIN_AVG_VOLUME = 50000      # 🔥 20-day average volume filter
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
@@ -117,24 +115,24 @@ if __name__ == "__main__":
             print("No YF history:", sym)
             continue
 
-        # --------------------------
-        # 🔥 VOLUME FILTERS
-        # --------------------------
-
-        # 1️⃣ Last candle volume filter
-        last_volume = hist["Volume"].iloc[-1]
-        if last_volume < MIN_VOLUME:
-            print(f"Skipping {sym} — Low volume: {last_volume}")
+        # ------------------------------------
+        # 🔥 VOLUME FILTER — CURRENT VOLUME > AVG OF LAST 2 CANDLES
+        # ------------------------------------
+        if len(hist) < 3:
+            print("Not enough candles for volume filter:", sym)
             continue
 
-        # 2️⃣ 20-day average volume filter (optional)
-        hist["vol_ma20"] = hist["Volume"].rolling(20).mean()
-        avg_volume = hist["vol_ma20"].iloc[-1]
-        if avg_volume < MIN_AVG_VOLUME:
-            print(f"Skipping {sym} — Low 20-day avg volume: {int(avg_volume)}")
+        v0 = hist["Volume"].iloc[-1]   # current volume
+        v1 = hist["Volume"].iloc[-2]
+        v2 = hist["Volume"].iloc[-3]
+
+        avg_last_2 = (v1 + v2) / 2
+
+        if v0 <= avg_last_2:
+            print(f"Skipping {sym} — No volume spike (vol {v0}, avg2 {avg_last_2:.0f})")
             continue
 
-        # --------------------------
+        # ------------------------------------
 
         ath_info = compute_ath(hist)
         if not ath_info:
@@ -143,7 +141,7 @@ if __name__ == "__main__":
 
         ath, ath_idx, ath_pos, total = ath_info
 
-        # Must have minimum 3 candles since ATH
+        # Must have minimum 3 candles since ATH (your rule)
         if ath_pos > total - 4:
             print("ATH too recent, skipping.")
             continue
@@ -158,11 +156,11 @@ if __name__ == "__main__":
             msg = (
                 f"🚨 *IPO Near All-Time High!*\n"
                 f"*Symbol:* {sym}\n"
-                f"*CMP:* {current:.2f}\n"
+                f"*Listing Date:* {hist.index[0].date()}\n"
                 f"*ATH:* {ath:.2f}\n"
+                f"*CMP:* {current:.2f}\n"
                 f"*Distance from ATH:* {diff}%\n"
-                f"*Last Volume:* {last_volume}\n"
-                f"*20D Avg Volume:* {int(avg_volume)}"
+                f"*Volume Spike:* {v0} (avg2 = {int(avg_last_2)})"
             )
 
             print("ALERT:", sym, diff)
