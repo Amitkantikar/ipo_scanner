@@ -219,7 +219,7 @@ def send_telegram_message(text: str) -> bool:
     payload = {
         "chat_id": CHAT_ID,
         "text": text,
-        "parse_mode": "MarkdownV2",
+        "parse_mode": "HTML",
         "disable_web_page_preview": True,
     }
     try:
@@ -282,14 +282,14 @@ def scan_ipos(min_listing_days: int, threshold: float, dry_run: bool = False) ->
             # prepare message
             listing_date = hist.index[0].date() if len(hist) else ""
             msg = (
-                f"*🚨 IPO Near All\\-Time High!* \n"
-                f"*Symbol:* `{escape_markdown(sym)}`\n"
-                f"*Listing Date:* `{listing_date}`\n"
-                f"*ATH:* `{ath:.2f}`\n"
-                f"*CMP:* `{current:.2f}`\n"
-                f"*Distance from ATH:* `{distance_pct:.2f}%`\n"
-                f"*Candles since ATH:* `{ath_info.candles_since_ath}`"
+                f"<b>🚨 IPO Near All-Time High!</b><br>"
+                f"<b>Symbol:</b> {sym}<br>"
+                f"<b>Listing Date:</b> {listing_date}<br>"
+                f"<b>ATH:</b> {ath:.2f}<br>"
+                f"<b>CMP:</b> {current:.2f}<br>"
+                f"<b>Distance from ATH:</b> {distance_pct:.2f}%<br>"
             )
+
 
             if not dry_run:
                 send_telegram_message(msg)
