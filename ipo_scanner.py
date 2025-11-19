@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 # CONFIG
 # --------------------------
 MIN_LISTING_DAYS = 120      # number of days since listing
-THRESHOLD = 0.05           # 10% near ATH
+THRESHOLD = 0.025           # 10% near ATH
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
