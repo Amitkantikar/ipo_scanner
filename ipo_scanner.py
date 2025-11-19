@@ -7,13 +7,13 @@ from datetime import datetime, timedelta
 import warnings
 
 
-warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=FutureWarning")
 
 # --------------------------
 # CONFIG
 # --------------------------
 MIN_LISTING_DAYS = 120      # number of days since listing
-THRESHOLD = 0.03            # 3% near ATH
+THRESHOLD = 0.03           # 3% near ATH
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
@@ -115,25 +115,6 @@ if __name__ == "__main__":
             print("No YF history:", sym)
             continue
 
-        # ------------------------------------
-        # 🔥 VOLUME FILTER — CURRENT VOLUME > AVG OF LAST 2 CANDLES
-        # ------------------------------------
-        if len(hist) < 3:
-            print("Not enough candles for volume filter:", sym)
-            continue
-
-        v0 = hist["Volume"].iloc[-1]   # current volume
-        v1 = hist["Volume"].iloc[-2]
-        v2 = hist["Volume"].iloc[-3]
-
-        avg_last_2 = (v1 + v2) / 2
-
-        if v0 <= avg_last_2:
-            print(f"Skipping {sym} — No volume spike (vol {v0}, avg2 {avg_last_2:.0f})")
-            continue
-
-        # ------------------------------------
-
         ath_info = compute_ath(hist)
         if not ath_info:
             print("ATH unavailable:", sym)
@@ -159,8 +140,7 @@ if __name__ == "__main__":
                 f"*Listing Date:* {hist.index[0].date()}\n"
                 f"*ATH:* {ath:.2f}\n"
                 f"*CMP:* {current:.2f}\n"
-                f"*Distance from ATH:* {diff}%\n"
-                f"*Volume Spike:* {v0} (avg2 = {int(avg_last_2)})"
+                f"*Distance from ATH:* {diff}%"
             )
 
             print("ALERT:", sym, diff)
