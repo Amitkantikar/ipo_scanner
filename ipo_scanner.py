@@ -13,7 +13,9 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 # CONFIG
 # --------------------------
 MIN_LISTING_DAYS = 120      # number of days since listing
-THRESHOLD = 0.03           # 3% near ATH
+THRESHOLD = 0.03            # 3% near ATH
+MIN_VOLUME = 100000         # 🔥 volume filter (minimum last candle volume)
+MIN_AVG_VOLUME = 50000      # 🔥 20-day average volume filter
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
@@ -115,6 +117,25 @@ if __name__ == "__main__":
             print("No YF history:", sym)
             continue
 
+        # --------------------------
+        # 🔥 VOLUME FILTERS
+        # --------------------------
+
+        # 1️⃣ Last candle volume filter
+        last_volume = hist["Volume"].iloc[-1]
+        if last_volume < MIN_VOLUME:
+            print(f"Skipping {sym} — Low volume: {last_volume}")
+            continue
+
+        # 2️⃣ 20-day average volume filter (optional)
+        hist["vol_ma20"] = hist["Volume"].rolling(20).mean()
+        avg_volume = hist["vol_ma20"].iloc[-1]
+        if avg_volume < MIN_AVG_VOLUME:
+            print(f"Skipping {sym} — Low 20-day avg volume: {int(avg_volume)}")
+            continue
+
+        # --------------------------
+
         ath_info = compute_ath(hist)
         if not ath_info:
             print("ATH unavailable:", sym)
@@ -122,7 +143,7 @@ if __name__ == "__main__":
 
         ath, ath_idx, ath_pos, total = ath_info
 
-        # Must have minimum 3 candles since ATH (your rule)
+        # Must have minimum 3 candles since ATH
         if ath_pos > total - 4:
             print("ATH too recent, skipping.")
             continue
@@ -137,10 +158,11 @@ if __name__ == "__main__":
             msg = (
                 f"🚨 *IPO Near All-Time High!*\n"
                 f"*Symbol:* {sym}\n"
-                f"*Listing Date:* {hist.index[0].date()}\n"
-                f"*ATH:* {ath:.2f}\n"
                 f"*CMP:* {current:.2f}\n"
-                f"*Distance from ATH:* {diff}%"
+                f"*ATH:* {ath:.2f}\n"
+                f"*Distance from ATH:* {diff}%\n"
+                f"*Last Volume:* {last_volume}\n"
+                f"*20D Avg Volume:* {int(avg_volume)}"
             )
 
             print("ALERT:", sym, diff)
